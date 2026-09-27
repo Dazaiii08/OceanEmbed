@@ -3,5 +3,6 @@ uvicorn[standard]
 numpy
 xarray
 netCDF4
-torch
 pydantic
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
