@@ -1,0 +1,5 @@
+Validation,RMSE (°C),MAE (°C),Bias (°C),Pooled Correlation,Notes
+GLORYS held-out validation,1.4201,0.9798627364137685,—,—,Daily held-out GLORYS targets
+Climatology baseline,1.6194,1.4718034282445782,—,—,Baseline
+CORA — May 2020,0.975,0.708,0.413,0.994,7 validation days
+CORA — June 2020,1.218,0.845,0.334,0.988,30 validation days; primary CORA result

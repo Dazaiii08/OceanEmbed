@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+
+# Large data / generated arrays
+*.nc
+*.npy
+
+# Model checkpoints
+*.pth
+
+# Generated validation artifacts
+val_predictions*.npy
+
+# Temporary files
+*.tmp
+*.temp
