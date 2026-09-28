@@ -4,5 +4,6 @@ numpy
 xarray
 netCDF4
 pydantic
+scipy
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.13.0+cpu
