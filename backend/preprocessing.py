@@ -171,161 +171,66 @@ def get_available_dates():
 # ============================================================
 
 def prepare_input(date):
-    """
-    Reproduce the trained model's input preparation.
+    requested_date = np.datetime64(date)
 
-    Pipeline:
-
-        SST / SSH / SSS
-              |
-              v
-        spatial regridding
-              |
-              v
-        SSS forward-fill to SST daily timeline
-              |
-              v
-        select requested date
-              |
-              v
-        stack 3 channels
-              |
-              v
-        apply saved ocean mask
-              |
-              v
-        NaN -> 0
-              |
-              v
-        float32 model input
-
-    Returns
-    -------
-    model_input : np.ndarray
-        Shape (76, 76, 3)
-
-    raw_X : np.ndarray
-        Shape (76, 76, 3)
-    """
-
-    # --------------------------------------------------------
-    # LOAD
-    # --------------------------------------------------------
-
-    sst, ssh, sss = load_input_datasets()
-
-    requested_date = np.datetime64(
-        date
-    )
-
-    # --------------------------------------------------------
-    # SPATIAL REGRIDDING
-    # --------------------------------------------------------
-
-    sst_regridded = _regrid_to_model_grid(
-        sst
-    )
-
-    ssh_regridded = _regrid_to_model_grid(
-        ssh
-    )
-
-    sss_regridded = _regrid_to_model_grid(
-        sss
-    )
-
-    # --------------------------------------------------------
-    # SSS DAILY ALIGNMENT
-    #
-    # SSS was originally weekly.
-    # It was forward-filled onto the SST daily timeline.
-    # --------------------------------------------------------
-
-    sss_daily = sss_regridded.reindex(
-        time=sst_regridded.time,
-        method="ffill"
-    )
-
-    # --------------------------------------------------------
-    # SELECT REQUESTED DATE
-    # --------------------------------------------------------
-
-    try:
-        sst_day = sst_regridded.sel(
-            time=requested_date
-        )
-    except KeyError:
-        raise ValueError(
-            f"Date {date} is not available in SST dataset."
+    # SST
+    with xr.open_dataset(SST_FILE) as ds:
+        sst = _get_variable(ds, "analysed_sst")
+        sst_day = sst.sel(time=requested_date)
+        sst_regridded = _regrid_to_model_grid(sst_day)
+        sst_array = np.asarray(
+            sst_regridded.values,
+            dtype=np.float32
         )
 
-    try:
-        ssh_day = ssh_regridded.sel(
-            time=requested_date
-        )
-    except KeyError:
-        raise ValueError(
-            f"Date {date} is not available in SSH dataset."
-        )
-
-    try:
-        sss_day = sss_daily.sel(
-            time=requested_date
-        )
-    except KeyError:
-        raise ValueError(
-            f"Date {date} is not available after SSS alignment."
+    # SSH
+    with xr.open_dataset(SSH_FILE) as ds:
+        ssh = _get_variable(ds, "sla")
+        ssh_day = ssh.sel(time=requested_date)
+        ssh_regridded = _regrid_to_model_grid(ssh_day)
+        ssh_array = np.asarray(
+            ssh_regridded.values,
+            dtype=np.float32
         )
 
-    # --------------------------------------------------------
-    # NUMPY
-    # --------------------------------------------------------
+    # SSS
+    with xr.open_dataset(SSS_FILE) as ds:
+        sss = _get_variable(ds, "sss")
+        sss_times = sss.time.values
 
-    sst_array = np.squeeze(
-        sst_day.values
-    )
+        if requested_date < sss_times[0]:
+            sss_day = xr.full_like(
+                sss.isel(time=0, drop=True),
+                np.nan
+            )
+        else:
+            sss_day = sss.sel(
+                time=requested_date,
+                method="ffill"
+            )
 
-    ssh_array = np.squeeze(
-        ssh_day.values
-    )
+        sss_regridded = _regrid_to_model_grid(sss_day)
+        sss_array = np.asarray(
+            sss_regridded.values,
+            dtype=np.float32
+        )
 
-    sss_array = np.squeeze(
-        sss_day.values
-    )
-
-    # --------------------------------------------------------
-    # SHAPE CHECK
-    # --------------------------------------------------------
-
-    expected_shape = (
-        76,
-        76
-    )
+    expected_shape = (76, 76)
 
     if sst_array.shape != expected_shape:
         raise ValueError(
-            f"SST shape mismatch: "
-            f"expected {expected_shape}, "
-            f"got {sst_array.shape}"
+            f"SST shape mismatch: expected {expected_shape}, got {sst_array.shape}"
         )
 
     if ssh_array.shape != expected_shape:
         raise ValueError(
-            f"SSH shape mismatch: "
-            f"expected {expected_shape}, "
-            f"got {ssh_array.shape}"
+            f"SSH shape mismatch: expected {expected_shape}, got {ssh_array.shape}"
         )
 
     if sss_array.shape != expected_shape:
         raise ValueError(
-            f"SSS shape mismatch: "
-            f"expected {expected_shape}, "
-            f"got {sss_array.shape}"
+            f"SSS shape mismatch: expected {expected_shape}, got {sss_array.shape}"
         )
-
-    # --------------------------------------------------------
-    # STACK CHANNELS
-    # --------------------------------------------------------
 
     raw_X = np.stack(
         [
@@ -336,55 +241,22 @@ def prepare_input(date):
         axis=-1
     )
 
-    # --------------------------------------------------------
-    # APPLY EXACT TRAINING OCEAN MASK
-    #
-    # The saved model dataset masked land / invalid cells
-    # before converting NaNs to zero.
-    #
-    # Broadcasting:
-    #
-    #   ocean_mask: (76, 76)
-    #   raw_X:      (76, 76, 3)
-    #
-    # --------------------------------------------------------
-
     raw_X = np.where(
         OCEAN_MASK[:, :, None],
         raw_X,
         np.nan
     )
 
-    # --------------------------------------------------------
-    # SAME NaN HANDLING USED FOR TRAINING INPUT ARRAYS
-    # --------------------------------------------------------
-
     raw_X = np.nan_to_num(
         raw_X,
         nan=0.0
     )
 
-    # --------------------------------------------------------
-    # MODEL INPUT
-    #
-    # IMPORTANT:
-    # No normalization is applied.
-    # The trained checkpoint expects the raw input scale.
-    # --------------------------------------------------------
-
     model_input = raw_X.astype(
         np.float32
     )
 
-    # --------------------------------------------------------
-    # FINAL SHAPE CHECK
-    # --------------------------------------------------------
-
-    expected_final_shape = (
-        76,
-        76,
-        3
-    )
+    expected_final_shape = (76, 76, 3)
 
     if model_input.shape != expected_final_shape:
         raise ValueError(
@@ -394,7 +266,6 @@ def prepare_input(date):
         )
 
     return model_input, raw_X
-
 
 # ============================================================
 # TEST
