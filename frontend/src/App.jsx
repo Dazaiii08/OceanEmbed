@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import "./App.css";
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import "./App.css";
 
 const API_BASE = "https://oceanembed-api-wsmd.onrender.com";
 
